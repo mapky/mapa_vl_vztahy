@@ -4,15 +4,50 @@ var map = new ol.Map({
     renderer: 'canvas',
     layers: layersList,
     view: new ol.View({
-         maxZoom: 28, minZoom: 10
+        constrainResolution: true,
+        maxZoom: 28,
+        minZoom: 10,
+        
     })
 });
 
 //initial view - epsg:3857 coordinates if not "Match project CRS"
 map.getView().fit([2016023.919643, 6308428.563739, 2133946.162159, 6366583.323275], map.getSize());
 
-//full zooms only
-map.getView().setProperties({constrainResolution: true});
+//change cursor
+function pointerOnFeature(evt) {
+    if (evt.dragging) {
+        return;
+    }
+    var hasFeature = map.hasFeatureAtPixel(evt.pixel, {
+        layerFilter: function(layer) {
+            return layer && (layer.get("interactive"));
+        }
+    });
+    map.getViewport().style.cursor = hasFeature ? "pointer" : "";
+}
+map.on('pointermove', pointerOnFeature);
+function styleCursorMove() {
+    map.on('pointerdrag', function() {
+        map.getViewport().style.cursor = "move";
+    });
+    map.on('pointerup', function() {
+        map.getViewport().style.cursor = "default";
+    });
+}
+styleCursorMove();
+
+// North arrow (SVG)
+// The SVG is displayed as a fixed OpenLayers map control.
+// Change width/height below to adjust its size.
+var northArrowElement = document.createElement('div');
+northArrowElement.className = 'north-arrow-control';
+northArrowElement.innerHTML = '<img src="images/severka.svg" alt="Severka">';
+
+var northArrowControl = new ol.control.Control({
+    element: northArrowElement
+});
+map.addControl(northArrowControl);
 
 ////small screen definition
     var hasTouchScreen = map.getViewport().classList.contains('ol-touch');
@@ -130,7 +165,10 @@ var doHover = false;
 function createPopupField(currentFeature, currentFeatureKeys, layer) {
     var popupText = '';
     for (var i = 0; i < currentFeatureKeys.length; i++) {
-        if (currentFeatureKeys[i] != 'geometry' && currentFeatureKeys[i] != 'layerObject' && currentFeatureKeys[i] != 'idO') {
+        if (currentFeatureKeys[i] != 'geometry' &&
+            currentFeatureKeys[i] != 'layerObject' &&
+            currentFeatureKeys[i] != 'idO' &&
+            currentFeatureKeys[i] != '_mvtLayer_') {
             var popupField = '';
             if (layer.get('fieldLabels')[currentFeatureKeys[i]] == "hidden field") {
                 continue;
@@ -268,7 +306,7 @@ function onPointerMove(evt) {
                     highlightStyle = new ol.style.Style({
                         image: new ol.style.Circle({
                             fill: new ol.style.Fill({
-                                color: "#ffff00"
+                                color: "rgba(255, 255, 0, 1.00)"
                             }),
                             radius: radius
                         })
@@ -279,7 +317,7 @@ function onPointerMove(evt) {
 
                     highlightStyle = new ol.style.Style({
                         stroke: new ol.style.Stroke({
-                            color: '#ffff00',
+                            color: 'rgba(255, 255, 0, 1.00)',
                             lineDash: null,
                             width: featureWidth
                         })
@@ -288,7 +326,7 @@ function onPointerMove(evt) {
                 } else {
                     highlightStyle = new ol.style.Style({
                         fill: new ol.style.Fill({
-                            color: '#ffff00'
+                            color: 'rgba(255, 255, 0, 1.00)'
                         })
                     })
                 }
@@ -466,6 +504,7 @@ map.on('singleclick', onSingleClickWMS);
 //get container
 var topLeftContainerDiv = document.getElementById('top-left-container')
 var bottomLeftContainerDiv = document.getElementById('bottom-left-container')
+var topRightContainerDiv = document.getElementById('top-right-container')
 var bottomRightContainerDiv = document.getElementById('bottom-right-container')
 
 //title
@@ -490,7 +529,11 @@ var bottomRightContainerDiv = document.getElementById('bottom-right-container')
 
 
 //scalebar
-
+var scaleLineControl = new ol.control.ScaleLine({
+    units: 'metric',
+    minWidth: 100
+});
+map.addControl(scaleLineControl);
 
 //layerswitcher
 
@@ -513,16 +556,19 @@ var bottomAttribution = new ol.control.Attribution({
 });
 map.addControl(bottomAttribution);
 
-var attributionList = document.createElement('li');
-attributionList.innerHTML = `
-	<a href="https://github.com/qgis2web/qgis2web">qgis2web</a> &middot;
-	<a href="https://openlayers.org/">OpenLayers</a> &middot;
-	<a href="https://qgis.org/">QGIS</a>	
-`;
-var bottomAttributionUl = bottomAttribution.element.querySelector('ul');
-if (bottomAttributionUl) {
-  bottomAttribution.element.insertBefore(attributionList, bottomAttributionUl);
-}
+map.once('rendercomplete', function() {
+  var bottomAttributionUl = bottomAttribution.element.querySelector('ul');
+  if (bottomAttributionUl) {
+    var layerAttrs = Array.from(bottomAttributionUl.querySelectorAll('li'))
+      .map(function(li) { return li.innerHTML.trim(); }).filter(Boolean);
+    var attribHtml = `
+    <a href="https://github.com/qgis2web/qgis2web">qgis2web</a> &middot;
+    <a href="https://openlayers.org/">OpenLayers</a> &middot;
+    <a href="https://qgis.org/">QGIS</a>`;
+    if (layerAttrs.length > 0) { attribHtml += ' &nbsp;|&nbsp; ' + layerAttrs.join(', '); }
+    bottomAttributionUl.innerHTML = '<li>' + attribHtml + '</li>';
+  }
+});
 
 
 // Disable "popup on hover" or "highlight on hover" if ol-control mouseover
